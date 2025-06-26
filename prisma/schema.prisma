@@ -1,0 +1,454 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  company       String?
+  phone         String?
+  country       String?
+  plan          Plan      @default(FREE)
+  status        UserStatus @default(ACTIVE)
+  trialEndsAt   DateTime?
+  paidUntil     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  clients       Client[]
+  suppliers     Supplier[]
+  products      Product[]
+  invoices      Invoice[]
+  quotes        Quote[]
+  purchases     Purchase[]
+  expenses      Expense[]
+  transactions  Transaction[]
+  bankAccounts  BankAccount[]
+  reports       Report[]
+  aiGeneratedContent AIGeneratedContent[]
+  
+  @@map("users")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      AdminRole @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("admins")
+}
+
+// Enums
+enum Plan {
+  FREE
+  ECONOMIC
+  PREMIUM
+  VIP
+}
+
+enum UserStatus {
+  ACTIVE
+  TRIAL
+  SUSPENDED
+  EXPIRED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+}
+
+// Business Entities
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  country     String?
+  taxId       String?
+  currency    String    @default("USD")
+  paymentTerms Int      @default(30) // days
+  discount    Float     @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices    Invoice[]
+  quotes      Quote[]
+  transactions Transaction[]
+  
+  @@map("clients")
+}
+
+model Supplier {
+  id          String     @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  country     String?
+  taxId       String?
+  currency    String     @default("USD")
+  paymentTerms Int       @default(30)
+  notes       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  // Relations
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases   Purchase[]
+  
+  @@map("suppliers")
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  sku         String?
+  category    String?
+  price       Float     @default(0)
+  cost        Float     @default(0)
+  currency    String    @default("USD")
+  unit        String    @default("pcs")
+  stock       Int       @default(0)
+  minStock    Int       @default(0)
+  taxRate     Float     @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoiceItems InvoiceItem[]
+  quoteItems  QuoteItem[]
+  purchaseItems PurchaseItem[]
+  
+  @@map("products")
+}
+
+// Invoicing System
+model Invoice {
+  id              String       @id @default(cuid())
+  invoiceNumber   String       @unique
+  status          InvoiceStatus @default(DRAFT)
+  issueDate       DateTime     @default(now())
+  dueDate         DateTime
+  subtotal        Float        @default(0)
+  taxAmount       Float        @default(0)
+  discountAmount  Float        @default(0)
+  totalAmount     Float        @default(0)
+  paidAmount      Float        @default(0)
+  currency        String       @default("USD")
+  notes           String?
+  terms           String?
+  paymentMethod   String?
+  paymentDate     DateTime?
+  reminderSent    Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  // Relations
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id])
+  items           InvoiceItem[]
+  transactions    Transaction[]
+  
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0)
+  taxRate     Float    @default(0)
+  discount    Float    @default(0)
+  total       Float    @default(0)
+  
+  // Relations
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  
+  @@map("invoice_items")
+}
+
+model Quote {
+  id            String      @id @default(cuid())
+  quoteNumber   String      @unique
+  status        QuoteStatus @default(DRAFT)
+  issueDate     DateTime    @default(now())
+  validUntil    DateTime
+  subtotal      Float       @default(0)
+  taxAmount     Float       @default(0)
+  discountAmount Float      @default(0)
+  totalAmount   Float       @default(0)
+  currency      String      @default("USD")
+  notes         String?
+  terms         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  // Relations
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        Client      @relation(fields: [clientId], references: [id])
+  items         QuoteItem[]
+  
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float   @default(0)
+  taxRate     Float   @default(0)
+  discount    Float   @default(0)
+  total       Float   @default(0)
+  
+  // Relations
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  
+  @@map("quote_items")
+}
+
+// Purchase Management
+model Purchase {
+  id              String         @id @default(cuid())
+  purchaseNumber  String         @unique
+  status          PurchaseStatus @default(PENDING)
+  orderDate       DateTime       @default(now())
+  deliveryDate    DateTime?
+  subtotal        Float          @default(0)
+  taxAmount       Float          @default(0)
+  totalAmount     Float          @default(0)
+  paidAmount      Float          @default(0)
+  currency        String         @default("USD")
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  // Relations
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplierId      String
+  supplier        Supplier       @relation(fields: [supplierId], references: [id])
+  items           PurchaseItem[]
+  
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id          String   @id @default(cuid())
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float    @default(0)
+  taxRate     Float    @default(0)
+  total       Float    @default(0)
+  
+  // Relations
+  purchaseId  String
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  
+  @@map("purchase_items")
+}
+
+// Expense Management
+model Expense {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  amount      Float       @default(0)
+  currency    String      @default("USD")
+  category    String
+  date        DateTime    @default(now())
+  paymentMethod String?
+  receipt     String?     // file path
+  isRecurring Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("expenses")
+}
+
+// Financial Management
+model Transaction {
+  id            String          @id @default(cuid())
+  type          TransactionType
+  amount        Float           @default(0)
+  currency      String          @default("USD")
+  description   String
+  date          DateTime        @default(now())
+  paymentMethod String?
+  reference     String?
+  status        String          @default("completed")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  // Relations
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?         @relation(fields: [clientId], references: [id])
+  invoiceId     String?
+  invoice       Invoice?        @relation(fields: [invoiceId], references: [id])
+  bankAccountId String?
+  bankAccount   BankAccount?    @relation(fields: [bankAccountId], references: [id])
+  
+  @@map("transactions")
+}
+
+model BankAccount {
+  id            String        @id @default(cuid())
+  name          String
+  accountNumber String
+  bankName      String
+  currency      String        @default("USD")
+  balance       Float         @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  
+  @@map("bank_accounts")
+}
+
+// Reports
+model Report {
+  id          String     @id @default(cuid())
+  title       String
+  type        ReportType
+  dateFrom    DateTime
+  dateTo      DateTime
+  data        String     // JSON data
+  generatedAt DateTime   @default(now())
+  
+  // Relations
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("reports")
+}
+
+// AI Generated Content
+model AIGeneratedContent {
+  id          String    @id @default(cuid())
+  type        String    // invoice_template, blog_post, email_template, etc.
+  prompt      String
+  content     String
+  metadata    String?   // JSON metadata
+  usageCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("ai_generated_content")
+}
+
+// Payment & Subscription
+model Payment {
+  id            String        @id @default(cuid())
+  stripePaymentId String?     @unique
+  amount        Float
+  currency      String        @default("USD")
+  status        PaymentStatus @default(PENDING)
+  plan          Plan
+  userId        String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@map("payments")
+}
+
+// Enums for status fields
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum PurchaseStatus {
+  PENDING
+  ORDERED
+  DELIVERED
+  CANCELLED
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum ReportType {
+  SALES
+  PURCHASES
+  EXPENSES
+  FINANCIAL
+  TAX
+  INVENTORY
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
